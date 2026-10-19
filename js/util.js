@@ -22,6 +22,23 @@ export function addDays(s, n) {
   d.setDate(d.getDate() + n);
   return iso(d);
 }
+/** Same day next month(s), clamped (Jan 31 + 1 month -> Feb 28/29). */
+export function addMonths(s, n) {
+  const d = parseISO(s);
+  const day = d.getDate();
+  d.setDate(1);
+  d.setMonth(d.getMonth() + n);
+  const last = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  d.setDate(Math.min(day, last));
+  return iso(d);
+}
+/** Next due date for a repeating to-do: steps from its due date until it lands after today. */
+export function nextRepeat(due, repeat, today = todayISO()) {
+  const step = (x) => repeat === 'daily' ? addDays(x, 1) : repeat === 'weekly' ? addDays(x, 7) : addMonths(x, 1);
+  let next = step(due || today);
+  while (next <= today) next = step(next);
+  return next;
+}
 /** Whole days from a to b (b - a), DST-safe. */
 export function diffDays(a, b) {
   const da = parseISO(a), db = parseISO(b);
@@ -91,11 +108,18 @@ export function greeting() {
 /**
  * Parse natural shorthand at the end of a quick-add line:
  *   "email prof tomorrow !"  -> { title: 'email prof', due: <tomorrow>, priority: 3 }
- * Supports: today, tonight, tomorrow/tmr, mon..sun, "next week", and "!" for high priority.
+ * Supports: today, tonight, tomorrow/tmr, mon..sun, "next week", "!" for high priority,
+ * and repeats: daily / weekly / monthly / "every week" (repeating items default to due today).
  */
 export function parseQuick(text, today = todayISO()) {
   let t = ` ${text.trim()} `;
-  let priority = 2, due = null;
+  let priority = 2, due = null, repeat = null;
+  const rep = t.match(/\s(?:every\s(day|week|month)|(daily|weekly|monthly))\s/i);
+  if (rep) {
+    const w = (rep[1] || rep[2]).toLowerCase();
+    repeat = { day: 'daily', week: 'weekly', month: 'monthly' }[w] || w;
+    t = t.replace(rep[0], ' ');
+  }
   if (/\s!+\s/.test(t) || /!\s*$/.test(t)) { priority = 3; t = t.replace(/!+/g, ' '); }
   const rules = [
     [/\s(today|tonight|tdy)\s/i, () => today],
@@ -112,5 +136,6 @@ export function parseQuick(text, today = todayISO()) {
     const m = t.match(re);
     if (m) { due = fn(m); t = t.replace(re, ' '); break; }
   }
-  return { title: t.replace(/\s+/g, ' ').trim(), due, priority };
+  if (repeat && !due) due = today;
+  return { title: t.replace(/\s+/g, ' ').trim(), due, priority, repeat };
 }

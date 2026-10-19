@@ -14,7 +14,7 @@
     { "src": "icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ],
   "shortcuts": [
-    { "name": "New task", "url": "./#tasks" },
+    { "name": "Lists", "url": "./#tasks" },
     { "name": "School", "url": "./#school" }
   ]
 }

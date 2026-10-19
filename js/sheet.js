@@ -4,6 +4,7 @@ import { COLORS, colorVars, classes, ASSIGN_TYPES, BLOCK_CATS, loadSample } from
 import { classDetail } from './views.js';
 import { todayISO, addDays, uid, esc, DAY_LETTER, DAY_SHORT, WEEK_ORDER, toMin } from './util.js';
 import { icons } from './icons.js';
+import { AISLES } from './lists.js';
 import { syncState, signIn, signUp, signOut, syncNow } from './sync.js';
 
 const sheet = document.getElementById('sheet');
@@ -64,8 +65,8 @@ function render() {
     if (mode === 'edit' && !item) return closeSheet();
     title = mode === 'edit' ? `Edit ${LABEL[ctx.type].toLowerCase()}` : 'New';
     if (mode === 'add') {
-      tabs = `<div class="type-tabs" role="group" aria-label="Type">${Object.entries(LABEL).map(([k, l]) =>
-        `<button type="button" data-sheet="type" data-type="${k}" aria-pressed="${ctx.type === k}">${l}</button>`).join('')}</div>`;
+      tabs = `<div class="type-tabs" role="group" aria-label="Type">${ADD_TYPES.map((k) =>
+        `<button type="button" data-sheet="type" data-type="${k}" aria-pressed="${ctx.type === k}">${LABEL[k]}</button>`).join('')}</div>`;
     }
     body = FORMS[ctx.type](item || {}, ctx.preset || {});
   }
@@ -75,7 +76,8 @@ function render() {
 }
 
 // ---------- form building blocks ----------
-const LABEL = { assignment: 'Assignment', task: 'Task', class: 'Class', habit: 'Habit', block: 'Block' };
+const LABEL = { assignment: 'Assignment', task: 'To-do', class: 'Class', habit: 'Habit', block: 'Block', item: 'Item' };
+const ADD_TYPES = ['assignment', 'task', 'class', 'habit', 'block'];
 
 const field = (label, inner) => `<label class="field"><span>${label}</span>${inner}</label>`;
 const group = (label, inner) => `<div class="field"><span class="field-label">${label}</span>${inner}</div>`;
@@ -84,7 +86,7 @@ const radio = (name, value, label, checked, extra = '') =>
 const daysPicker = (name, days = []) => `<div class="opts">${WEEK_ORDER.map((d) =>
   `<label class="opt day" title="${DAY_SHORT[d]}"><input class="sr-only" type="checkbox" name="${name}" value="${d}" ${days.includes(d) ? 'checked' : ''}>${DAY_LETTER[d]}</label>`).join('')}</div>`;
 const swatches = (name, current) => `<div class="swatches">${Object.keys(COLORS).filter((k) => k !== 'ink').map((k) =>
-  `<label class="swatch" style="${colorVars(k)}" title="${k}"><input class="sr-only" type="radio" name="${name}" value="${k}" ${current === k ? 'checked' : ''}><span class="sr-only">${k}</span></label>`).join('')}</div>`;
+  `<label class="swatch" style="${colorVars(k)}" title="${COLORS[k].label}"><input class="sr-only" type="radio" name="${name}" value="${k}" ${current === k ? 'checked' : ''}><span class="sr-only">${COLORS[k].label}</span></label>`).join('')}</div>`;
 const actions = (isEdit) => `<div class="form-actions">
   ${isEdit ? `<button type="button" class="btn danger" data-sheet="delete">Delete</button>` : ''}
   <button type="submit" class="btn primary">${isEdit ? 'Save' : 'Add'}</button></div>`;
@@ -119,6 +121,7 @@ const FORMS = {
       ${field('What', `<input class="title-input" type="text" name="title" required placeholder="Call the financial aid office" value="${esc(x.title || '')}" autocomplete="off" enterkeyhint="done">`)}
       ${field('Due (optional)', `<input type="date" name="due" value="${x.due || ''}">`)}
       <div class="opts">${[['Today', t], ['Tomorrow', addDays(t, 1)], ['This weekend', addDays(t, (6 - new Date().getDay() + 7) % 7 || 7)], ['No date', '']].map(([l, d]) => `<button type="button" class="opt" data-sheet="date" data-date="${d}">${l}</button>`).join('')}</div>
+      ${group('Repeat', `<div class="opts">${[['', 'Never'], ['daily', 'Daily'], ['weekly', 'Weekly'], ['monthly', 'Monthly']].map(([v, l]) => radio('repeat', v, l, (x.repeat || '') === v)).join('')}</div>`)}
       ${group('Priority', `<div class="opts">${[[1, 'Low'], [2, 'Normal'], [3, 'High']].map(([v, l]) => radio('priority', v, l, (x.priority || 2) === v)).join('')}</div>`)}
       ${field('Notes (optional)', `<textarea name="notes" rows="2">${esc(x.notes || '')}</textarea>`)}
       ${actions(!!x.id)}</form>`;
@@ -137,6 +140,15 @@ const FORMS = {
         <button type="button" class="btn ghost small" data-sheet="add-meet" style="align-self:flex-start">+ Another time (lab, discussion)</button>`)}
       ${field('Instructor (optional)', `<input type="text" name="instructor" value="${esc(c.instructor || '')}" autocomplete="off">`)}
       ${actions(!!c.id)}</form>`;
+  },
+
+  item(i) {
+    return `<form class="form" data-form="item">
+      ${field('Item', `<input class="title-input" type="text" name="name" required value="${esc(i.name || '')}" autocomplete="off" enterkeyhint="done">`)}
+      ${field('Quantity (optional)', `<input type="text" name="qty" value="${esc(i.qty || '')}" placeholder="2, 1 lb, 1 dozen…" autocomplete="off">`)}
+      ${i.list === 'grocery' ? group('Aisle', `<div class="opts">${AISLES.map(([k, l]) => radio('aisle', k, l, (i.aisle || 'other') === k)).join('')}</div>`) : ''}
+      ${field('Note (optional)', `<input type="text" name="note" value="${esc(i.note || '')}" placeholder="Brand, size, store…" autocomplete="off">`)}
+      ${actions(true)}</form>`;
   },
 
   habit(h) {
@@ -287,7 +299,10 @@ async function onSubmit(e) {
   if (kind === 'assignment') {
     obj = { ...prev, id, title: str('title'), classId: str('classId') || null, type: str('type') || 'hw', due: str('due'), time: str('time') || null, notes: str('notes'), done: prev.done || false };
   } else if (kind === 'task') {
-    obj = { ...prev, id, title: str('title'), due: str('due') || null, priority: Number(str('priority')) || 2, notes: str('notes'), done: prev.done || false };
+    const repeat = str('repeat') || null;
+    obj = { ...prev, id, title: str('title'), due: str('due') || (repeat ? todayISO() : null), repeat, priority: Number(str('priority')) || 2, notes: str('notes'), done: prev.done || false };
+  } else if (kind === 'item') {
+    obj = { ...prev, id, name: str('name'), qty: str('qty'), note: str('note'), aisle: str('aisle') || prev.aisle || 'other' };
   } else if (kind === 'habit') {
     obj = { ...prev, id, name: str('name'), color: str('color') || 'mint', order: prev.order ?? Date.now() };
   } else if (kind === 'block') {

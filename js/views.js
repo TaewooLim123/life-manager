@@ -1,6 +1,6 @@
 // Screen renderers. Each returns an HTML string; app.js wires events by data-action.
 import {
-  todayISO, addDays, diffDays, weekday, weekStart, parseISO, fmtDate, dueInfo, fmtTime, fmtDur,
+  todayISO, iso, addDays, diffDays, weekday, weekStart, parseISO, fmtDate, dueInfo, fmtTime, fmtDur,
   toMin, nowMin, esc, greeting, DAY_SHORT, DAY_LETTER, MONTHS, WEEK_ORDER,
 } from './util.js';
 import {
@@ -8,7 +8,9 @@ import {
   habits, isChecked, streak, best, nextMeeting, typeLabel,
 } from './model.js';
 import { icons } from './icons.js';
+import { renderList, openCount } from './lists.js';
 
+const REPEAT_LABEL = { daily: 'Daily', weekly: 'Weekly', monthly: 'Monthly' };
 const DAY_FULL = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
 // ---------- shared bits ----------
@@ -46,7 +48,7 @@ function itemRow(x, today, { showClass = true } = {}) {
     if (showClass && c) meta.push(`<span class="tag"><span class="tag-sw"></span>${esc(c.code || c.name)}</span>`);
     meta.push(esc(typeLabel(x.type)));
   } else {
-    meta.push('Task');
+    meta.push(x.repeat ? `↻ ${REPEAT_LABEL[x.repeat]}` : 'To-do');
   }
   if (x.time) meta.push(fmtTime(x.time));
   const style = isA ? colorVars(c?.color || 'ink') : (x.priority === 3 ? '--cc:var(--danger);--cf:#fff' : '--cc:var(--ink);--cf:var(--paper)');
@@ -76,6 +78,9 @@ export function renderToday() {
   if (dueToday.length) subParts.push(`<b>${dueToday.length} due today</b>`);
   if (overdue.length) subParts.push(`<b style="color:var(--danger)">${overdue.length} overdue</b>`);
   subParts.push(`${weekCount} assignment${weekCount === 1 ? '' : 's'} this week`);
+  const doneToday = [...assignments({ includeDone: true }), ...tasks({ includeDone: true })]
+    .filter((x) => x.done && x.doneAt && todayISO() === iso(new Date(x.doneAt))).length;
+  if (doneToday) subParts.push(`${doneToday} done today ✓`);
 
   const hasAny = classes().length || open.length || tasks().length || habits().length;
 
@@ -102,8 +107,12 @@ export function renderToday() {
     empty('All clear', 'Nothing else due today or tomorrow.'),
   { count: dueSoon.length || '', danger: overdue.length > 0, link: ['All', 'school'] });
 
+  // Big items (exams, projects) two weeks out, so they never sneak up.
+  const shown = new Set([next?.id, ...dueSoon.map((x) => x.id)]);
+  const big = open.filter((a) => (a.type === 'exam' || a.type === 'project') && a.due && a.due <= addDays(t, 14) && !shown.has(a.id));
+  const leftAll = left + (big.length ? section('Exams & projects', list(big.map((x) => itemRow({ ...x, _kind: 'assignment' }, t))), { count: big.length }) : '');
   const right = scheduleSection(t) + habitsStrip(t) + balanceSection(t);
-  return html + `<div class="cols two"><div>${left}</div><div>${right}</div></div>`;
+  return html + `<div class="cols two"><div>${leftAll}</div><div>${right}</div></div>`;
 }
 
 function hero(a, t) {
@@ -162,7 +171,7 @@ function habitsStrip(t) {
 }
 
 const BAL = [
-  ['class', 'Class', 'var(--ink)'], ['study', 'Study', COLORS.cobalt.bg], ['work', 'Work', COLORS.orange.bg],
+  ['class', 'Class', 'var(--ink-2)'], ['study', 'Study', COLORS.cobalt.bg], ['work', 'Work', COLORS.orange.bg],
   ['health', 'Health', COLORS.mint.bg], ['social', 'Social', COLORS.pink.bg], ['other', 'Other', COLORS.violet.bg],
 ];
 const AWAKE = 16 * 60;
@@ -186,8 +195,8 @@ function balanceSection(t) {
   else if (booked >= 10 * 60) note = `Heavy day: ${fmtDur(booked)} booked. Protect a real break.`;
   else if (!by.health && booked >= 6 * 60) note = 'Full day and no movement planned. Even a 20-minute walk counts.';
   else if (next && openLeft >= 90) note = `${fmtDur(openLeft)} still open today. Good window to get ahead on “${esc(next.title)}”.`;
-  else note = 'Balanced. Keep it that way.';
-  return section('Balance', `<div class="balance"><div class="balance-bar" role="img" aria-label="${fmtDur(booked)} booked of 16 waking hours">${bar}</div><div class="balance-legend">${legend}</div><p class="balance-note">${note}</p></div>`);
+  else note = '';
+  return section('Balance', `<div class="balance"><div class="balance-bar" role="img" aria-label="${fmtDur(booked)} booked of 16 waking hours">${bar}</div><div class="balance-legend">${legend}</div>${note ? `<p class="balance-note">${note}</p>` : ''}</div>`);
 }
 
 // ---------- SCHOOL ----------
@@ -200,8 +209,8 @@ export function renderSchool(state) {
     title: `School<span class="accent">.</span>`,
   });
   html += `<div class="seg" role="group" aria-label="View">
-    <button data-action="seg" data-seg="due" aria-pressed="${view === 'due'}">Due</button>
-    <button data-action="seg" data-seg="classes" aria-pressed="${view === 'classes'}">Classes</button></div>`;
+    <button data-action="seg" data-key="schoolView" data-seg="due" aria-pressed="${view === 'due'}">Due</button>
+    <button data-action="seg" data-key="schoolView" data-seg="classes" aria-pressed="${view === 'classes'}">Classes</button></div>`;
 
   if (view === 'classes') return html + classGrid(t);
 
@@ -280,19 +289,27 @@ export function classDetail(c) {
     </div>`;
 }
 
-// ---------- TASKS ----------
-export function renderTasks() {
-  const t = todayISO();
+// ---------- LISTS (to-do, groceries, shopping) ----------
+export function renderLists(state) {
+  const view = state.listView || 'todo';
   const open = tasks();
+  const counts = { todo: open.length, grocery: openCount('grocery'), shopping: openCount('shopping') };
+  let html = head({ eyebrow: view === 'todo' ? `${open.length} to-dos open` : `${counts[view]} to buy`, title: `Lists<span class="accent">.</span>` });
+  html += `<div class="seg" role="group" aria-label="List">${[['todo', 'To-do'], ['grocery', 'Groceries'], ['shopping', 'Shopping']].map(([k, l]) =>
+    `<button data-action="seg" data-key="listView" data-seg="${k}" aria-pressed="${view === k}">${l}${counts[k] ? ` <span class="seg-n">${counts[k]}</span>` : ''}</button>`).join('')}</div>`;
+  return `<div class="narrow">${html + (view === 'todo' ? todoBody(open) : renderList(view))}</div>`;
+}
+
+function todoBody(open) {
+  const t = todayISO();
   const overdue = open.filter((x) => x.due && x.due < t);
   const today = open.filter((x) => x.due === t);
   const upcoming = open.filter((x) => x.due && x.due > t);
   const someday = open.filter((x) => !x.due);
-  let html = head({ eyebrow: `${open.length} open`, title: `Tasks<span class="accent">.</span>` });
-  html += `<form class="quick-add" data-form="quick">
-      <input class="input" name="q" type="text" placeholder="Add a task…" autocomplete="off" enterkeyhint="done" aria-label="New task">
+  let html = `<form class="quick-add" data-form="quick">
+      <input class="input" name="q" type="text" placeholder="Add a to-do…" autocomplete="off" enterkeyhint="done" aria-label="New to-do">
       <button class="btn primary" type="submit">Add</button></form>
-    <p class="hint">Try <code>call dentist fri</code>, <code>pay rent tomorrow !</code> (<code>!</code> = high priority)</p>`;
+    <p class="hint">Try <code>call dentist fri</code>, <code>pay rent tomorrow !</code>, <code>laundry every week</code></p>`;
   if (!open.length) html += empty('Inbox zero', 'Capture anything that isn’t a class assignment here.');
   const sec = (title, xs, opts) => xs.length ? section(title, list(xs.map((x) => itemRow({ ...x, _kind: 'task' }, t))), { count: xs.length, ...opts }) : '';
   html += sec('Overdue', overdue, { danger: true }) + sec('Today', today) + sec('Upcoming', upcoming) + sec('Someday', someday);
@@ -326,7 +343,7 @@ export function renderHabits() {
       <div class="streak-big ${st >= 3 ? 'hot' : ''}"><b class="tnum">${st}</b><span>${st === 1 ? 'day' : 'days'}</span>${b > st ? `<div style="font-size:11px;color:var(--muted);margin-top:4px">best ${b}</div>` : ''}</div>
     </div>`;
   }).join('');
-  return html + `<div class="list">${rows}</div>`;
+  return `<div class="narrow">${html}<div class="list">${rows}</div></div>`;
 }
 
 // ---------- WEEK ----------

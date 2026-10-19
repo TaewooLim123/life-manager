@@ -2,17 +2,18 @@
 import { store } from './store.js';
 import { todayISO, addDays, diffDays, weekday, toMin, uid } from './util.js';
 
-// Same colors in light and dark mode; fg chosen for contrast on the solid color.
+// Muted, earthy palette (same in light and dark mode); fg chosen for contrast.
+// Keys are kept from v1 so synced data keeps its colors; `label` is what you see.
 export const COLORS = {
-  tomato: { bg: '#F2542D', fg: '#FFFFFF' },
-  cobalt: { bg: '#2F5BEA', fg: '#FFFFFF' },
-  citron: { bg: '#E7CC2B', fg: '#17140F' },
-  mint: { bg: '#1FAE85', fg: '#0B2219' },
-  violet: { bg: '#8A4FFF', fg: '#FFFFFF' },
-  pink: { bg: '#F0569A', fg: '#FFFFFF' },
-  orange: { bg: '#FF9417', fg: '#17140F' },
-  sky: { bg: '#239FDB', fg: '#0A1D29' },
-  ink: { bg: '#17140F', fg: '#F4EFE6' },
+  cobalt: { bg: '#4D6A8A', fg: '#FFFFFF', label: 'Slate' },
+  tomato: { bg: '#B4674E', fg: '#FFFFFF', label: 'Clay' },
+  mint: { bg: '#6E8B6F', fg: '#FFFFFF', label: 'Sage' },
+  citron: { bg: '#C4A055', fg: '#1E1A14', label: 'Ochre' },
+  violet: { bg: '#775E8C', fg: '#FFFFFF', label: 'Plum' },
+  sky: { bg: '#4F8584', fg: '#FFFFFF', label: 'Teal' },
+  pink: { bg: '#B07A84', fg: '#FFFFFF', label: 'Rose' },
+  orange: { bg: '#C0905E', fg: '#1E1A14', label: 'Sand' },
+  ink: { bg: '#17140F', fg: '#F4EFE6', label: 'Ink' },
 };
 export const colorVars = (name) => {
   const c = COLORS[name] || COLORS.ink;
@@ -150,7 +151,14 @@ export async function loadSample() {
     ['assignment', { id: uid(), classId: ewrt, title: 'Read: Orwell, "Politics and the English Language"', type: 'reading', due: addDays(t, -2), done: true }],
     ['task', { id: uid(), title: 'Email counselor about transfer plan', due: addDays(t, 1), priority: 3, done: false }],
     ['task', { id: uid(), title: 'Renew parking permit', due: addDays(t, 2), priority: 2, done: false }],
-    ['task', { id: uid(), title: 'Groceries', due: t, priority: 2, done: false }],
+    ['task', { id: uid(), title: 'Laundry', due: t, priority: 2, repeat: 'weekly', done: false }],
+    ['task', { id: uid(), title: 'Pay phone bill', due: addDays(t, 5), priority: 2, repeat: 'monthly', done: false }],
+    ...[['Milk', '1 gal', 'dairy'], ['Eggs', '12', 'dairy'], ['Bananas', '', 'produce'], ['Spinach', '', 'produce'], ['Chicken thighs', '2 lb', 'meat'], ['Rice', '', 'pantry'], ['Greek yogurt', '', 'dairy', true]]
+      .map(([name, qty, aisle, checked]) => ['item', { id: uid(), list: 'grocery', name, qty, aisle, checked: !!checked, archived: false, count: 1 }]),
+    ...[['Oat milk', 'dairy', 6], ['Coffee beans', 'drinks', 4], ['Avocados', 'produce', 3], ['Tortillas', 'bakery', 2]]
+      .map(([name, aisle, count]) => ['item', { id: uid(), list: 'grocery', name, qty: '', aisle, checked: false, archived: true, count }]),
+    ['item', { id: uid(), list: 'shopping', name: 'USB-C cable', qty: '', checked: false, archived: false, count: 1 }],
+    ['item', { id: uid(), list: 'shopping', name: 'Blue books', qty: '3', note: 'Bookstore, for PHYS midterm', checked: false, archived: false, count: 1 }],
     ['task', { id: uid(), title: 'Update résumé for internship apps', due: null, priority: 2, done: false }],
     ['block', { id: uid(), title: 'Library study', category: 'study', days: [1, 3], start: '15:00', end: '17:00' }],
     ['block', { id: uid(), title: 'Gym', category: 'health', days: [2, 4, 6], start: '17:30', end: '18:45' }],

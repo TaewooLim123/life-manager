@@ -1,16 +1,17 @@
 // App shell: routing, rendering, event delegation, keyboard shortcuts, service worker.
 import { store } from './store.js';
-import { renderToday, renderSchool, renderTasks, renderHabits, renderWeek } from './views.js';
+import { renderToday, renderSchool, renderLists, renderHabits, renderWeek } from './views.js';
+import { addItems, toggleItem, clearChecked, unclear, LISTS } from './lists.js';
 import { initSheet, openSheet, closeSheet, isSheetOpen, rerenderSettings } from './sheet.js';
 import { toggleCheck, loadSample } from './model.js';
 import { icons } from './icons.js';
 import { initSync, onSyncState, syncState } from './sync.js';
-import { parseQuick, uid, todayISO } from './util.js';
+import { parseQuick, uid, todayISO, nextRepeat, fmtDate } from './util.js';
 
 const TABS = [
   ['today', 'Today', renderToday],
   ['school', 'School', renderSchool],
-  ['tasks', 'Tasks', renderTasks],
+  ['tasks', 'Lists', renderLists],
   ['habits', 'Habits', renderHabits],
   ['week', 'Week', renderWeek],
 ];
@@ -20,6 +21,7 @@ const ADD_DEFAULT = { today: 'assignment', school: 'assignment', tasks: 'task', 
 const state = {
   tab: 'today',
   schoolView: localStorage.getItem('schoolView') || 'due',
+  listView: localStorage.getItem('listView') || 'todo',
   weekDay: null,
 };
 
@@ -104,6 +106,8 @@ document.addEventListener('click', async (e) => {
   switch (action) {
     case 'go': location.hash = el.dataset.tab; break;
     case 'add': {
+      // On a grocery/shopping list, + jumps to the quick-add field instead of a form.
+      if (state.tab === 'tasks' && state.listView !== 'todo' && !el.dataset.type && !inSheet) { focusQuickAdd(); break; }
       const type = el.dataset.type || ADD_DEFAULT[state.tab];
       const preset = el.dataset.class ? { classId: el.dataset.class, returnTo: el.dataset.class } : {};
       if (state.tab === 'school' && state.schoolView === 'classes' && !el.dataset.type && !inSheet) {
@@ -120,30 +124,69 @@ document.addEventListener('click', async (e) => {
       if (!item) break;
       const done = !item.done;
       if (done && navigator.vibrate) navigator.vibrate(12);
+      // Repeating to-do: completing it rolls the due date forward instead of finishing it.
+      if (done && kind === 'task' && item.repeat) {
+        const prevDue = item.due;
+        const next = nextRepeat(item.due, item.repeat);
+        await store.patch(id, { due: next, lastDoneAt: new Date().toISOString() });
+        toast(`Done · next ${fmtDate(next, { long: true })}`, { label: 'Undo', fn: () => store.patch(id, { due: prevDue }) });
+        break;
+      }
       await store.patch(id, { done, doneAt: done ? new Date().toISOString() : null });
       if (done) toast(`Done: ${item.title}`, { label: 'Undo', fn: () => store.patch(id, { done: false, doneAt: null }) });
       break;
     }
     case 'habit': await toggleCheck(id, el.dataset.date); break;
-    case 'seg':
-      state.schoolView = el.dataset.seg;
-      localStorage.setItem('schoolView', state.schoolView);
+    case 'seg': {
+      const key = el.dataset.key || 'schoolView';
+      state[key] = el.dataset.seg;
+      localStorage.setItem(key, state[key]);
       render();
       break;
+    }
+    case 'item-toggle': await toggleItem(id); break;
+    case 'item-again': {
+      await addItems(el.dataset.list, el.dataset.name);
+      toast(`Added ${el.dataset.name}`);
+      break;
+    }
+    case 'clear-checked': {
+      const list = el.dataset.list;
+      const cleared = await clearChecked(list);
+      toast(`Cleared ${cleared.length} from ${LISTS[list]}`, { label: 'Undo', fn: () => unclear(cleared) });
+      break;
+    }
     case 'day': state.weekDay = el.dataset.day; render(); break;
     case 'settings': openSheet({ mode: 'settings' }); break;
     case 'sample': await loadSample(); toast('Sample week loaded'); break;
   }
 });
 
+function focusQuickAdd() {
+  const q = main.querySelector('input[name="q"]');
+  if (q) { q.scrollIntoView({ block: 'center', behavior: 'smooth' }); q.focus(); }
+}
+
 main.addEventListener('submit', async (e) => {
-  if (e.target.dataset.form !== 'quick') return;
+  const form = e.target.dataset.form;
+  if (form === 'item') {
+    e.preventDefault();
+    const input = e.target.elements.q;
+    const text = input.value;
+    if (!text.trim()) return;
+    input.value = '';
+    const { added, dupes } = await addItems(e.target.dataset.list, text);
+    main.querySelector('input[name="q"]')?.focus();
+    toast(added.length ? `Added ${added.length > 1 ? added.length + ' items' : added[0]}${dupes.length ? ` · ${dupes.join(', ')} already on list` : ''}` : `${dupes.join(', ')} already on the list`);
+    return;
+  }
+  if (form !== 'quick') return;
   e.preventDefault();
   const input = e.target.elements.q;
-  const { title, due, priority } = parseQuick(input.value);
+  const { title, due, priority, repeat } = parseQuick(input.value);
   if (!title) return;
   input.value = '';
-  await store.put('task', { id: uid(), title, due, priority, done: false });
+  await store.put('task', { id: uid(), title, due, priority, repeat, done: false });
   // Re-render replaced the input; restore focus for rapid entry.
   main.querySelector('input[name="q"]')?.focus();
   toast(due ? `Added · due ${due === todayISO() ? 'today' : new Date(due + 'T00:00').toLocaleDateString([], { weekday: 'short', month: 'short', day: 'numeric' })}` : 'Added');
@@ -153,7 +196,11 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && isSheetOpen()) { closeSheet(); return; }
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if (typing || e.metaKey || e.ctrlKey || e.altKey || isSheetOpen()) return;
-  if (e.key === 'n' || e.key === 'N') { e.preventDefault(); openSheet({ mode: 'add', type: ADD_DEFAULT[state.tab] }); }
+  if (e.key === 'n' || e.key === 'N') {
+    e.preventDefault();
+    if (state.tab === 'tasks' && state.listView !== 'todo') focusQuickAdd();
+    else openSheet({ mode: 'add', type: ADD_DEFAULT[state.tab] });
+  }
   const n = Number(e.key);
   if (n >= 1 && n <= TABS.length) location.hash = TABS[n - 1][0];
 });

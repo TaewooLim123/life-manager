@@ -2,7 +2,7 @@
 // App files: served from cache instantly, refreshed in the background (stale-while-revalidate).
 // On localhost we go network-first so edits show up without cache busting.
 // Bump VERSION when shipping changes so old caches are cleared.
-const VERSION = 'lm-v3';
+const VERSION = 'lm-v4';
 const SHELL = [
   './',
   'index.html',
@@ -17,6 +17,7 @@ const SHELL = [
   'js/sheet.js',
   'js/util.js',
   'js/icons.js',
+  'js/lists.js',
   'icons/icon-192.png',
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',

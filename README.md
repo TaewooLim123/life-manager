@@ -8,9 +8,9 @@ A phone-first life manager for a student: **classes & assignments, tasks, habits
 
 | Tab | What it does |
 | --- | --- |
-| **Today** | The most urgent deadline as a big countdown card, everything due today and tomorrow, today's classes and blocks with a NOW line, habit check-ins, and a balance bar (class / study / work / health / free). |
+| **Today** | The most urgent deadline as a big countdown card, everything due today and tomorrow, exams and projects in the next two weeks, today's classes and blocks with a NOW line, habit check-ins, and a balance bar (class / study / work / health / free). |
 | **School** | Assignments grouped by day (Overdue → Today → … → Later), or a grid of class cards. Tap a class to see its meeting times and open work. |
-| **Tasks** | Non-school to-dos. Quick-add understands `tomorrow`, `fri`, `next week` and `!` (high priority). |
+| **Lists** | **To-do**: non-school to-dos. Quick-add understands `tomorrow`, `fri`, `!` (high priority) and `every week` / `monthly`; finishing a repeating to-do moves it to its next date. **Groceries**: items sort into store aisles automatically; add several at once ("2 milk, eggs, bananas"); checked items go to *In cart*; *Clear* turns them into *Buy again* suggestions, ranked by how often you buy them. **Shopping**: the same for non-grocery things. |
 | **Habits** | Tap to check off today. Shows streaks, your best run and a 7-day grid; tap a past day to fix it. |
 | **Week** | Timetable built from class meeting times plus repeating study, gym and work blocks. On phone you see one day at a time; on desktop, all 7 days. |
 
@@ -59,6 +59,7 @@ index.html            app shell
 styles.css            design system (tokens, light/dark, components)
 js/app.js             routing, events, keyboard shortcuts, boot
 js/views.js           the five screens
+js/lists.js           grocery + shopping lists (aisle sorting, buy-again)
 js/sheet.js           add/edit forms, class detail, settings
 js/model.js           derived data: due lists, schedule, streaks, sample data
 js/store.js           IndexedDB store with dirty tracking

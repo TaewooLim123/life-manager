@@ -3,9 +3,10 @@ Run: python3 tools/make_icons.py
 """
 import math, struct, zlib, os
 
-TOMATO = (0xF2, 0x54, 0x2D)
+BG = (0x2B, 0x26, 0x22)
 CREAM = (0xF4, 0xEF, 0xE6)
-INK = (0x17, 0x14, 0x0F)
+RUST = (0xA9, 0x57, 0x3D)
+SHADE = (0x1C, 0x19, 0x16)
 
 def sd_round_rect(px, py, x0, y0, x1, y1, r):
     cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
@@ -27,7 +28,7 @@ def render(size, scale_content=1.0):
     def T(v):  # scale around center for maskable safe zone
         return (256 + (v - 256) * k) * s
     card = (T(118), T(118), T(378), T(378), 44 * k * s)
-    shadow_off = 20 * k * s
+    shadow_off = 12 * k * s
     check = [(T(178), T(262)), (T(232), T(316)), (T(336), T(196))]
     stroke = 38 * k * s
     rows = []
@@ -35,13 +36,13 @@ def render(size, scale_content=1.0):
         row = bytearray([0])
         for x in range(size):
             px, py = x + 0.5, y + 0.5
-            col = TOMATO
+            col = BG
             d = sd_round_rect(px - shadow_off, py - shadow_off, *card)
-            col = blend(col, INK, max(0, min(1, 0.5 - d)))
+            col = blend(col, SHADE, max(0, min(1, 0.5 - d)))
             d = sd_round_rect(px, py, *card)
             col = blend(col, CREAM, max(0, min(1, 0.5 - d)))
             d = min(sd_segment(px, py, *check[0], *check[1], stroke), sd_segment(px, py, *check[1], *check[2], stroke))
-            col = blend(col, INK, max(0, min(1, 0.5 - d)))
+            col = blend(col, RUST, max(0, min(1, 0.5 - d)))
             row += bytes(int(round(c)) for c in col)
         rows.append(bytes(row))
     raw = b''.join(rows)
