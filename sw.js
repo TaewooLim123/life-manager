@@ -2,7 +2,7 @@
 // App files: served from cache instantly, refreshed in the background (stale-while-revalidate).
 // On localhost we go network-first so edits show up without cache busting.
 // Bump VERSION when shipping changes so old caches are cleared.
-const VERSION = 'lm-v2';
+const VERSION = 'lm-v3';
 const SHELL = [
   './',
   'index.html',
