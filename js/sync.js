@@ -27,6 +27,7 @@ function set(changes) {
   Object.assign(syncState, changes);
   for (const fn of listeners) fn(syncState);
 }
+export const getClient = () => sb;
 export function onSyncState(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 export async function initSync() {

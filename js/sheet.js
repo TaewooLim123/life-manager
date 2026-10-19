@@ -5,6 +5,7 @@ import { classDetail } from './views.js';
 import { todayISO, addDays, uid, esc, DAY_LETTER, DAY_SHORT, WEEK_ORDER, toMin } from './util.js';
 import { icons } from './icons.js';
 import { AISLES } from './lists.js';
+import { canvasSettings, connect as canvasConnect, runImport, disconnect as canvasDisconnect, setMapping } from './canvas.js';
 import { syncState, signIn, signUp, signOut, syncNow } from './sync.js';
 
 const sheet = document.getElementById('sheet');
@@ -112,6 +113,7 @@ const FORMS = {
       </div>
       <div class="opts">${[['Today', t], ['Tomorrow', addDays(t, 1)], ['In 1 week', addDays(t, 7)]].map(([l, d]) => `<button type="button" class="opt" data-sheet="date" data-date="${d}">${l}</button>`).join('')}</div>
       ${field('Notes (optional)', `<textarea name="notes" rows="2" placeholder="Chapters, rubric link, group members…">${esc(a.notes || '')}</textarea>`)}
+      ${/^https:\/\//.test(a.url || '') ? `<a class="btn ghost small" style="align-self:flex-start" href="${esc(a.url)}" target="_blank" rel="noopener">Open in Canvas ↗</a>` : ''}
       ${actions(!!a.id)}</form>`;
   },
 
@@ -205,6 +207,7 @@ function settingsBody() {
   }
   return `<div class="form">
     <div class="set-group"><h3>Sync</h3>${sync}</div>
+    <div class="set-group"><h3>Canvas</h3>${canvasBody()}</div>
     <div class="set-group"><h3>Appearance</h3>
       <div class="opts">${[['system', 'System'], ['light', 'Light'], ['dark', 'Dark']].map(([k, l]) =>
         `<label class="opt"><input class="sr-only" type="radio" name="theme" value="${k}" ${theme === k ? 'checked' : ''}>${l}</label>`).join('')}</div></div>
@@ -219,6 +222,51 @@ function settingsBody() {
         <button class="btn small danger" data-sheet="wipe">Reset this device</button>
       </div></div>
   </div>`;
+}
+
+function summarize(r) {
+  const parts = [];
+  if (r.added) parts.push(`${r.added} new`);
+  if (r.updated) parts.push(`${r.updated} updated`);
+  let msg = parts.length ? `Canvas: ${parts.join(', ')}` : 'Canvas: up to date';
+  if (r.unmapped?.length) msg += ` · pick a class for ${r.unmapped.length} course${r.unmapped.length > 1 ? 's' : ''} in Settings`;
+  return msg;
+}
+
+function ago(isoStr) {
+  if (!isoStr) return 'never';
+  const min = Math.round((Date.now() - new Date(isoStr).getTime()) / 60000);
+  if (min < 1) return 'just now';
+  if (min < 60) return `${min} min ago`;
+  const h = Math.round(min / 60);
+  return h < 24 ? `${h}h ago` : new Date(isoStr).toLocaleDateString([], { month: 'short', day: 'numeric' });
+}
+
+function canvasBody() {
+  if (!syncState.configured || !syncState.signedIn) return `<p>Sign in under <b>Sync</b> first. The import runs through your account.</p>`;
+  const s = canvasSettings();
+  if (!s?.url) {
+    return `<p>Pull assignments in automatically. On Canvas (website), open <b>Calendar</b>, click <b>Calendar Feed</b> at the bottom right, and copy the link.</p>
+      <form class="form" data-form="canvas" style="gap:10px">
+        <input type="url" name="url" required placeholder="https://deanza.instructure.com/feeds/calendars/user_….ics" autocomplete="off" autocapitalize="off" spellcheck="false">
+        <button class="btn primary" type="submit">Connect & import</button>
+      </form>`;
+  }
+  const cs = classes();
+  const courses = (s.courses || []).map((c) => {
+    const v = (s.map || {})[c.name] || '';
+    return `<label class="field"><span>${esc(c.name)} · ${c.count}</span>
+      <select data-canvas-course="${esc(c.name)}">
+        <option value="" ${v ? '' : 'selected'}>Choose a class…</option>
+        ${cs.map((k) => `<option value="${k.id}" ${v === k.id ? 'selected' : ''}>${esc(k.code || k.name)}${k.code && k.name ? ' · ' + esc(k.name) : ''}</option>`).join('')}
+        <option value="new">+ Create a new class</option>
+        <option value="skip" ${v === 'skip' ? 'selected' : ''}>Don’t import</option>
+      </select></label>`;
+  }).join('');
+  return `<p>Connected. Last checked ${ago(s.lastImport)}${s.lastResult ? ` · ${s.lastResult.total} items in the feed` : ''}. It re-checks every hour while the app is open.</p>
+    ${s.lastError ? `<p style="color:var(--danger)">${esc(s.lastError)}</p>` : ''}
+    ${courses ? `<p>Which class is each Canvas course?</p><div class="form" style="gap:12px">${courses}</div>` : ''}
+    <div class="set-buttons"><button class="btn small" data-sheet="canvas-import">Import now</button><button class="btn small ghost" data-sheet="canvas-disconnect">Disconnect</button></div>`;
 }
 
 // ---------- events ----------
@@ -247,9 +295,25 @@ async function onClick(e) {
   }
   if (a === 'sync-now') { await syncNow(); render(); toastFn(syncState.status === 'error' ? 'Sync failed' : 'Synced'); return; }
   if (a === 'sign-out') { await signOut(); render(); return; }
+  if (a === 'canvas-import') {
+    el.disabled = true; el.textContent = 'Importing…';
+    try { toastFn(summarize(await runImport())); } catch (err) { toastFn(err.message); }
+    render(); return;
+  }
+  if (a === 'canvas-disconnect') {
+    if (!confirm('Stop importing from Canvas? Assignments already imported stay.')) return;
+    await canvasDisconnect(); render(); toastFn('Canvas disconnected'); return;
+  }
 }
 
 async function onChange(e) {
+  if (e.target.dataset.canvasCourse !== undefined) {
+    const sel = e.target;
+    sel.disabled = true;
+    try { toastFn(summarize(await setMapping(sel.dataset.canvasCourse, sel.value))); } catch (err) { toastFn(err.message); }
+    render();
+    return;
+  }
   if (e.target.name === 'theme') {
     const v = e.target.value;
     if (v === 'system') { localStorage.removeItem('theme'); delete document.documentElement.dataset.theme; }
@@ -270,6 +334,15 @@ async function onSubmit(e) {
   const kind = form.dataset.form;
   const fd = new FormData(form);
   const str = (k) => (fd.get(k) || '').toString().trim();
+
+  if (kind === 'canvas') {
+    const btn = form.querySelector('button');
+    btn.disabled = true; btn.textContent = 'Importing…';
+    try { toastFn(summarize(await canvasConnect(str('url')))); }
+    catch (err) { toastFn(err.message); btn.disabled = false; btn.textContent = 'Connect & import'; return; }
+    render();
+    return;
+  }
 
   if (kind === 'signin') {
     const email = str('email');

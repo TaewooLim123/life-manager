@@ -47,6 +47,19 @@ Until you do this, data stays on each device separately. You can still move it w
 6. In the app, open Settings → Sync and tap **Create account** once. On your other device, **Sign in** with the same email and password.
 7. Then turn off **Allow new users to sign up** (Authentication → Sign In / Providers) so nobody else can create an account.
 
+## Canvas import
+
+Assignments from Canvas show up automatically: the app re-checks the feed every hour while it's open. Canvas feeds don't allow direct browser access (no CORS headers), so a small Supabase Edge Function fetches the feed for the app. It only accepts `*.instructure.com/feeds/calendars/…` links, and only from your signed-in account.
+
+**One-time setup**
+1. Supabase → **Edge Functions** → **Deploy a new function** → **Via Editor**.
+2. Name it exactly `canvas-feed`, replace the sample code with [`supabase/functions/canvas-feed/index.ts`](supabase/functions/canvas-feed/index.ts), and click **Deploy**. Leave JWT verification on.
+3. On the Canvas website, open **Calendar**, click **Calendar Feed** (bottom right), and copy the link.
+4. In the app: Settings → **Canvas** → paste the link → **Connect & import**.
+5. Pick which of your classes each Canvas course belongs to. Codes like `MATH D001C` match a class coded `MATH 1C` automatically. You can also create a class from a course, or skip it.
+
+**What gets imported:** Canvas assignments, plus calendar events that look like exams (midterm, final, quiz, test). Re-imports update due dates and titles that changed in Canvas, but keep your own edits and done checkmarks, and never bring back an assignment you deleted.
+
 ### How sync works
 - Every edit is saved to IndexedDB first, so the app is instant and works offline. The edit is marked "dirty".
 - When you're online, dirty records are upserted to the `records` table, then anything newer is pulled from the server. This runs after edits, when the app comes back to the foreground, every 60 seconds, and on realtime events from your other device.
@@ -60,6 +73,7 @@ styles.css            design system (tokens, light/dark, components)
 js/app.js             routing, events, keyboard shortcuts, boot
 js/views.js           the five screens
 js/lists.js           grocery + shopping lists (aisle sorting, buy-again)
+js/canvas.js          Canvas calendar feed import (ICS parsing, course mapping)
 js/sheet.js           add/edit forms, class detail, settings
 js/model.js           derived data: due lists, schedule, streaks, sample data
 js/store.js           IndexedDB store with dirty tracking
@@ -67,5 +81,6 @@ js/sync.js            Supabase push/pull/realtime + email-code sign-in
 js/config.js          Supabase URL + anon key (blank = local only)
 sw.js                 offline cache
 supabase/schema.sql   database table, security rules, realtime
+supabase/functions/canvas-feed/index.ts   Edge Function that fetches the Canvas feed
 tools/make_icons.py   regenerates icons/ (pure Python, no dependencies)
 ```

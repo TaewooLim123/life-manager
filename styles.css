@@ -508,3 +508,9 @@ code { font: 600 .9em ui-monospace, SFMono-Regular, Menlo, monospace; background
 .buy-again .opt { font-size: 13px; padding: 6px 10px; color: var(--ink-2); }
 @media (max-width: 380px) { .seg button { padding: 8px 11px; } }
 .narrow { max-width: 760px; }
+.form select {
+  padding-right: 36px;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}

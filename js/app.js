@@ -2,6 +2,7 @@
 import { store } from './store.js';
 import { renderToday, renderSchool, renderLists, renderHabits, renderWeek } from './views.js';
 import { addItems, toggleItem, clearChecked, unclear, LISTS } from './lists.js';
+import { maybeAutoImport } from './canvas.js';
 import { initSheet, openSheet, closeSheet, isSheetOpen, rerenderSettings } from './sheet.js';
 import { toggleCheck, loadSample } from './model.js';
 import { icons } from './icons.js';
@@ -207,11 +208,23 @@ document.addEventListener('keydown', (e) => {
 
 window.addEventListener('hashchange', route);
 store.onChange(() => render());
-onSyncState(() => { renderSync(); rerenderSettings(); });
+onSyncState((s) => {
+  renderSync();
+  rerenderSettings();
+  if (s.signedIn && s.status === 'idle') autoCanvas(); // after the first sync, so mappings have arrived
+});
+
+// Canvas: quietly re-import at most hourly; only speak up when something changed.
+function autoCanvas() {
+  maybeAutoImport((r) => {
+    if (r.added) toast(`Canvas: ${r.added} new assignment${r.added > 1 ? 's' : ''}`);
+    else if (r.unmapped.length) toast(`Canvas: pick a class for ${r.unmapped.length} new course${r.unmapped.length > 1 ? 's' : ''} in Settings`);
+  });
+}
 
 // Re-render when the day rolls over or the app comes back to the foreground,
 // so "Today", countdowns and the NOW line are never stale.
-document.addEventListener('visibilitychange', () => { if (!document.hidden) render(); });
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { render(); autoCanvas(); } });
 const isTyping = () => main.contains(document.activeElement) && document.activeElement.tagName === 'INPUT';
 setInterval(() => { if (!document.hidden && !isSheetOpen() && !isTyping()) render(); }, 60_000);
 
