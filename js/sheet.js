@@ -4,7 +4,7 @@ import { COLORS, colorVars, classes, ASSIGN_TYPES, BLOCK_CATS, loadSample } from
 import { classDetail } from './views.js';
 import { todayISO, addDays, uid, esc, DAY_LETTER, DAY_SHORT, WEEK_ORDER, toMin } from './util.js';
 import { icons } from './icons.js';
-import { syncState, sendCode, verifyCode, signOut, syncNow } from './sync.js';
+import { syncState, signIn, signUp, signOut, syncNow } from './sync.js';
 
 const sheet = document.getElementById('sheet');
 const scrim = document.getElementById('scrim');
@@ -180,12 +180,11 @@ function settingsBody() {
   if (!syncState.configured) {
     sync = `<p>Sync is <b>off</b>. Everything is saved on this device. To sync your iPhone and Mac, add your Supabase URL and key to <code>js/config.js</code> (steps in README).</p>`;
   } else if (!syncState.signedIn) {
-    sync = `<p>Sign in once on each device with the same email. You'll get a 6-digit code.</p>
+    sync = `<p>Sign in with the same email and password on your iPhone and your Mac. First time? Use <b>Create account</b> once.</p>
       <form class="form" data-form="signin" style="gap:10px">
-        <input type="email" name="email" required placeholder="you@example.com" autocomplete="email" value="${esc(sessionStorage.getItem('pendingEmail') || '')}">
-        ${sessionStorage.getItem('pendingEmail') ? `<input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Code from the email" maxlength="10">
-          <div class="set-buttons"><button class="btn primary" type="submit" name="step" value="verify">Verify code</button><button class="btn ghost" type="button" data-sheet="resend">Send again</button></div>`
-        : `<button class="btn primary" type="submit" name="step" value="send">Email me a code</button>`}
+        <input type="email" name="email" required placeholder="you@example.com" autocomplete="username" autocapitalize="off" spellcheck="false">
+        <input type="password" name="password" required minlength="8" placeholder="Password (8+ characters)" autocomplete="current-password">
+        <div class="set-buttons"><button class="btn primary" type="submit" name="step" value="signin">Sign in</button><button class="btn ghost" type="submit" name="step" value="signup">Create account</button></div>
       </form>`;
   } else {
     const last = syncState.lastSync ? syncState.lastSync.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }) : '—';
@@ -236,7 +235,6 @@ async function onClick(e) {
   }
   if (a === 'sync-now') { await syncNow(); render(); toastFn(syncState.status === 'error' ? 'Sync failed' : 'Synced'); return; }
   if (a === 'sign-out') { await signOut(); render(); return; }
-  if (a === 'resend') { sessionStorage.removeItem('pendingEmail'); render(); return; }
 }
 
 async function onChange(e) {
@@ -263,18 +261,20 @@ async function onSubmit(e) {
 
   if (kind === 'signin') {
     const email = str('email');
-    const step = e.submitter?.value;
+    const password = (fd.get('password') || '').toString();
+    const btns = form.querySelectorAll('button');
+    btns.forEach((b) => { b.disabled = true; });
     try {
-      if (step === 'verify') {
-        await verifyCode(email, str('code'));
-        sessionStorage.removeItem('pendingEmail');
-        toastFn('Signed in · syncing');
-      } else {
-        await sendCode(email);
-        sessionStorage.setItem('pendingEmail', email);
-        toastFn('Code sent. Check your email');
-      }
-    } catch (err) { toastFn(err.message || 'Sign-in failed'); }
+      if (e.submitter?.value === 'signup') await signUp(email, password);
+      else await signIn(email, password);
+      toastFn('Signed in · syncing');
+    } catch (err) {
+      btns.forEach((b) => { b.disabled = false; });
+      const msg = err.message || 'Sign-in failed';
+      toastFn(/failed to fetch|network/i.test(msg) ? 'Can’t reach Supabase. Check your connection, or the project may be paused.'
+        : /invalid login/i.test(msg) ? 'Wrong email or password. New here? Tap Create account.' : msg);
+      return;
+    }
     render();
     return;
   }

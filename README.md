@@ -40,12 +40,12 @@ Until you do this, data stays on each device separately. You can still move it w
 
 1. Create a free project at [supabase.com](https://supabase.com).
 2. **SQL Editor → New query**: paste [`supabase/schema.sql`](supabase/schema.sql) and run it.
-3. **Authentication → Emails (Templates)**: in both **Magic Link** and **Confirm signup**, add the line `Your code: {{ .Token }}`.
-   The app signs you in with a code rather than a link. On iPhone, a home-screen app doesn't share storage with Safari, so tapping a link would sign in Safari instead of the app.
+3. **Authentication → Sign In / Providers → Email**: turn **Confirm email** off.
+   The app uses email + password with no emails sent, so you don't need custom SMTP. That also avoids magic links, which on iPhone would open Safari instead of the home-screen app.
 4. **Authentication → URL Configuration**: set the Site URL to your GitHub Pages URL.
-5. **Project Settings → API**: copy the Project URL and the `anon` public key into [`js/config.js`](js/config.js), then commit and push. The anon key is meant to be public; row-level security means only your signed-in account can read your rows.
-6. In the app, open Settings → Sync, enter your email, then type the code. Repeat on your other device with the same email.
-7. Optional hardening: once both devices are signed in, turn off **Allow new users to sign up** (Authentication → Providers → Email) so nobody else can create an account.
+5. **Project Settings**: copy the Project URL (Data API) and the **publishable** key (`sb_publishable_…`, or the legacy `anon` key) into [`js/config.js`](js/config.js), then commit and push. That key is meant to be public; row-level security means only your signed-in account can read your rows. Never put the `secret` / `service_role` key in the app.
+6. In the app, open Settings → Sync and tap **Create account** once. On your other device, **Sign in** with the same email and password.
+7. Then turn off **Allow new users to sign up** (Authentication → Sign In / Providers) so nobody else can create an account.
 
 ### How sync works
 - Every edit is saved to IndexedDB first, so the app is instant and works offline. The edit is marked "dirty".

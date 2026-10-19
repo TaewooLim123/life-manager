@@ -3,7 +3,7 @@
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from './config.js';
 import { store } from './store.js';
 
-const SDK_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
+const SDK_URL = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/+esm';
 const PAGE = 500;
 
 let sb = null;
@@ -132,16 +132,18 @@ async function pull() {
   await store.setMeta(key, since);
 }
 
-// ----- Auth: email one-time code -----
-// A 6-digit code (not just a link) matters on iPhone: home-screen apps don't share
-// storage with Safari, so a magic link would sign in Safari instead of the app.
-export async function sendCode(email) {
-  const { error } = await sb.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+// ----- Auth: email + password -----
+// Password sign-in needs no emails at all (Supabase's "Confirm email" is turned off),
+// which also avoids magic links: on iPhone a home-screen app doesn't share storage
+// with Safari, so a link would sign in Safari instead of the app.
+export async function signIn(email, password) {
+  const { error } = await sb.auth.signInWithPassword({ email, password });
   if (error) throw error;
 }
-export async function verifyCode(email, token) {
-  const { error } = await sb.auth.verifyOtp({ email, token: token.trim(), type: 'email' });
+export async function signUp(email, password) {
+  const { data, error } = await sb.auth.signUp({ email, password });
   if (error) throw error;
+  if (!data.session) throw new Error('Account created, but Supabase wants email confirmation. Turn off "Confirm email" in Supabase, then sign in.');
 }
 export async function signOut() {
   await sb.auth.signOut();
