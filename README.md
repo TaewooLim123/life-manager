@@ -1,5 +1,7 @@
 # Life Manager
 
+**Live:** https://taewoolim123.github.io/life-manager/
+
 A phone-first life manager for a student: **classes & assignments, tasks, habits, and a weekly schedule**, plus a daily balance check. It's plain HTML/CSS/JS with no build step. You can install it on the iPhone home screen or the Mac Dock, it works offline, and it can sync between devices through Supabase.
 
 ## Screens
@@ -26,10 +28,9 @@ Then open http://127.0.0.1:5178. In Settings, **Load sample week** fills the app
 
 The app has to be served over HTTPS for the home-screen install and offline mode, and GitHub Pages does that for free:
 
-1. Create a GitHub repo (e.g. `life-manager`) and push this folder to it.
-2. In the repo, go to **Settings → Pages → Deploy from a branch → `main` / root**.
-3. On the iPhone, open `https://<your-username>.github.io/life-manager/` in **Safari**, then Share → **Add to Home Screen**.
-4. On the Mac, open the same URL in Safari and choose File → **Add to Dock** (or use Chrome's Install button).
+1. Push to `main`. GitHub Pages (already enabled for this repo) redeploys in about a minute.
+2. On the iPhone, open https://taewoolim123.github.io/life-manager/ in **Safari**, then Share → **Add to Home Screen**.
+3. On the Mac, open the same URL in Safari and choose File → **Add to Dock** (or use Chrome's Install button).
 
 When you ship changes, bump `VERSION` in `sw.js` (e.g. `lm-v2`) so phones pick up the new files.
 
